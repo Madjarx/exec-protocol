@@ -1,0 +1,35 @@
+<script type="text/javascript">
+  RED.nodes.registerType('node-basic',{
+    category: 'yieldbox',
+    color: '#a6bbcf',
+    defaults: {
+      name: {value:"node-basic"}
+    },
+    inputs:1,
+    outputs:1,
+    icon: "file.png",
+    label: function() {
+      return this.name||"node-basic";
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="node-basic">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+      <label for="node-input-token"><i class="icon-tag"></i>Currency</label>
+      <select id="node-input-token">  
+        <option value="1">ETH</option>  
+        <option value="2">AVAX</option>  
+        <option value="3">BNB</option>  
+        <option value="4">USD</option>  
+        </select>  
+    </div>
+</script>
+
+<script type="text/html" data-help-name="node-basic">
+    <p>A basic node as an example</p>
+</script>

@@ -1,0 +1,12 @@
+artifacts
+cache
+node_modules
+test
+*.log
+.contract
+.wallet
+
+# TODO: must replace this key strategy
+#.env
+
+hardhat-template

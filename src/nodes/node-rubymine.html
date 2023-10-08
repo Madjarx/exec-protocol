@@ -1,0 +1,26 @@
+<script type="text/javascript">
+  RED.nodes.registerType('node-rubymine',{
+    category: 'yieldbox',
+    color: '#a6bbcf',
+    defaults: {
+      name: {value:"node-rubymine"}
+    },
+    inputs:1,
+    outputs:4,
+    icon: "file.png",
+    label: function() {
+      return this.name||"node-rubymine";
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="node-rubymine">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+</script>
+
+<script type="text/html" data-help-name="node-rubymine">
+    <p>A basic node as an example</p>
+</script>

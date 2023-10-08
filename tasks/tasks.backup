@@ -1,0 +1,894 @@
+import { task } from "hardhat/config";
+import * as dotenv from "dotenv";
+import * as fs from "fs";
+import { SignerWithAddress } from "hardhat-deploy-ethers/src/signers";
+import { BigNumber } from "ethers";
+import { ContractTransaction } from "@ethersproject/contracts";
+import { ContractReceipt } from "@ethersproject/contracts/src.ts";
+import ERC20_ABI from "../ABI/ERC20.json";
+import TRADERJOE_ABI from "../ABI/TraderJoe.json";
+import { TaskRegistry } from "../src/classes/Registry";
+import { SwapNativeTask } from "../src/tasks/SwapNativeTask";
+import { SwapTokensTask } from "../src/tasks/SwapTokensTask";
+import { AddLiquidityTask } from "../src/tasks/AddLiquidityTask";
+import { RemoveLiquidityTask } from "../src/tasks/RemoveLiquidityTask";
+import { ClaimTask } from "../src/tasks/ClaimTask";
+import { PoolClaimTask } from "../src/tasks/PoolClaimTask";
+import { BuyNodeTask } from "../src/tasks/BuyNodeTask";
+import { DepositTask } from "../src/tasks/DepositTask";
+import { StakeTask } from "../src/tasks/StakeTask";
+import { Money } from "../src/classes/Money";
+import { EnvUtil } from "../src/classes/EnvUtil";
+
+dotenv.config();
+
+//region CONSTANTS
+const FLOW_04_TASK_01_MIN_AMOUNT_OF_MIM_TO_START: string = process.env.FLOW_04_TASK_01_MIN_AMOUNT_OF_MIM_TO_START as string;
+const FLOW_04_TASK_01_MIN_AMOUNT_OF_WINE_REWARDS_TO_START: string = process.env.FLOW_04_TASK_01_MIN_AMOUNT_OF_WINE_REWARDS_TO_START as string;
+const FLOW_04_TASK_01_DO_WE_CLAIM_ALL: string = process.env.FLOW_04_TASK_01_DO_WE_CLAIM_ALL as string;
+const FLOW_04_TASK_01_AMOUNT_OF_WINE_TO_CLAIM: string = process.env.FLOW_04_TASK_01_AMOUNT_OF_WINE_TO_CLAIM as string;
+const FLOW_04_TASK_01_PERCENTAGE_OF_WINE_TO_STAKE_INTO_WINE_GRAPE_LP: string = process.env.FLOW_04_TASK_01_PERCENTAGE_OF_WINE_TO_STAKE_INTO_WINE_GRAPE_LP as string;
+const FLOW_04_TASK_01_PERCENTAGE_OF_WINE_TO_STAKE_INTO_WINE_MIM_LP: string = process.env.FLOW_04_TASK_01_PERCENTAGE_OF_WINE_TO_STAKE_INTO_WINE_MIM_LP as string;
+const FLOW_04_TASK_01_MIN_AMOUNT_OF_WINE_IN_WALLET: string = process.env.FLOW_04_TASK_01_MIN_AMOUNT_OF_WINE_IN_WALLET as string;
+//endregion
+
+let ethers: any = null;
+
+function callback() {
+    console.log("json file updated succesfully.");
+}
+
+function setEnvironment(hre: any) {
+    ethers = hre.ethers;
+}
+
+async function getAccount() {
+
+    let account1: SignerWithAddress;
+    const accounts = await ethers.getSigners();
+
+    // @ts-ignore
+    if (accounts.length > 0) {
+        account1 = accounts[0];
+    } else {
+        throw new Error("no accounts found by ethers.getSigners()");
+    }
+
+    return account1;
+
+}
+
+export async function execTx(tx: Promise<ContractTransaction> | ContractTransaction, options: { log: boolean | undefined, label: string | undefined; } = {
+    log: true,
+    label: undefined
+}): Promise<ContractReceipt> {
+    const before = await getBalances();
+    const result = await (await tx).wait();
+    const after = await getBalances();
+    const delta = await getDelta(before, after);
+    
+
+    options.log && console.log(`execTx`, {
+        before,
+        result,
+        after,
+        delta
+    });
+
+    return result;
+}
+
+function updateBalances(dataObj: object) {
+    console.log("updatingBalances...");
+
+    fs.readFile("../db/balances.json", "utf8", function readFileCallback(err, data) {
+        if (err) {
+            console.log(err);
+        } else {
+            const jsonObj = JSON.parse(data); // convert to object
+            console.log("jsonObj: ");
+            console.log(jsonObj);
+            console.log("dataObj: ");
+            console.log(dataObj);
+            const json = JSON.stringify(jsonObj); // convert it back to json
+            fs.writeFile("balances.json", json, "utf8", callback); // write it back
+        }
+    });
+}
+
+// context == application state / wallet state / connection to chain
+
+const registry = new TaskRegistry();
+
+async function claimExecutor(task: ClaimTask, safeArgs: { protocol: string, amount: BigNumber; }) {
+    console.log(`executing task ${task.getName()}...`);
+    console.log(safeArgs);
+
+
+    await task.execute({ protocol: safeArgs.protocol, amount: safeArgs.amount });
+}
+
+async function swapNativeExecutor(task: SwapNativeTask, safeArgs: { protocol: string, tokenInAddress: string, tokenOutAddress: string, amount: BigNumber; }) {
+    console.log(`executing task ${task.getName()}...`);
+    console.log(safeArgs);
+
+    await task.execute({
+        protocol: safeArgs.protocol,
+        tokenInAddress: safeArgs.tokenInAddress,
+        tokenOutAddress: safeArgs.tokenOutAddress,
+        amount: safeArgs.amount
+    });
+}
+
+async function swapTokensExecutor(task: SwapTokensTask, safeArgs: { protocol: string, tokenInAddress: string, tokenOutAddress: string, amount: BigNumber; }) {
+    console.log(`executing task ${task.getName()}...`);
+    console.log(safeArgs);
+
+    await task.execute({
+        protocol: safeArgs.protocol,
+        tokenInAddress: safeArgs.tokenInAddress,
+        tokenOutAddress: safeArgs.tokenOutAddress,
+        amount: safeArgs.amount
+    });
+}
+
+async function addLiquidityExecutor(task: AddLiquidityTask, safeArgs: { protocol: string, token1Address: string, token2Address: string, amount1: BigNumber, amount2: BigNumber; }) {
+    console.log(`executing task ${task.getName()}...`);
+    console.log(safeArgs);
+
+    await task.execute({
+        protocol: safeArgs.protocol,
+        token1Address: safeArgs.token1Address,
+        token2Address: safeArgs.token2Address,
+        amount1: safeArgs.amount1,
+        amount2: safeArgs.amount2
+    });
+}
+
+async function poolclaimExecutor(
+    task: PoolClaimTask,
+    safeArgs: {
+        protocol: string, pool: string, amount: BigNumber;
+    }) {
+
+    console.log(`executing task ${task.getName()}...`);
+    console.log(safeArgs);
+
+    await task.execute({
+        protocol: safeArgs.protocol,
+        pool: safeArgs.pool,
+        amount: safeArgs.amount
+    });
+}
+
+async function removeLiquidityExecutor(task: RemoveLiquidityTask, safeArgs: { protocol: string, token1Address: string, token2Address: string, liquidityPair: string, amount: BigNumber; }) {
+    console.log(`executing task ${task.getName()}...`);
+    console.log(safeArgs);
+
+    await task.execute({
+        protocol: safeArgs.protocol,
+        token1Address: safeArgs.token1Address,
+        token2Address: safeArgs.token2Address,
+        liquidityPair: safeArgs.liquidityPair,
+        amount: safeArgs.amount
+    });
+}
+
+async function stakeExecutor(task: StakeTask, safeArgs: { protocol: string, amount: BigNumber; }) {
+    console.log(`executing task ${task.getName()}...`);
+    console.log(safeArgs);
+
+    await task.execute({ protocol: safeArgs.protocol, amount: safeArgs.amount });
+}
+
+async function depositExecutor(task: DepositTask, safeArgs: { protocol: string, amount: BigNumber; liquidityPair: string; }) {
+    console.log(`executing task ${task.getName()}...`);
+    console.log(safeArgs);
+
+    const tx = await task.execute({
+        protocol: safeArgs.protocol,
+        amount: safeArgs.amount,
+        liquidityPair: safeArgs.liquidityPair
+    });
+
+    // await tx.wait();
+}
+
+async function buyNodeExecutor(task: BuyNodeTask, safeArgs: { protocol: string, node: string, amount: BigNumber; }) {
+    console.log(`executing task ${task.getName()}...`);
+    console.log(safeArgs);
+
+    await task.execute({ protocol: safeArgs.protocol, node: safeArgs.node, amount: safeArgs.amount });
+}
+
+
+async function checkFunds(address: string) {
+
+    const accounts = await ethers.provider.listAccounts();
+    console.log("accounts: ");
+    console.log(accounts);
+    console.log("checking available funds...");
+    console.log("wallet address:", address);
+    const balance = await ethers.provider.getBalance(address);
+    const balanceFmt = ethers.utils.formatEther(balance);
+    console.log("balance:", balanceFmt);
+}
+
+
+interface balances{
+    [key:string]: number,
+}
+async function getBalances():Promise<balances>{
+    const account: SignerWithAddress = await getAccount();
+
+    const grapeTokenAddress = registry.findToken("grape").address;
+    const wineTokenAddress = registry.findToken("wine").address;
+    const mimTokenAddress = registry.findToken("mim").address;
+    const grapeWineLPTokenAddress = registry.findToken("grape-wine-lp").address;
+    const mimWineLPTokenAddress = registry.findToken("mim-wine-lp").address;
+    const grapeMIMLPTokenAddress = registry.findToken("grape-mim-lp").address;
+
+    const grapeTokenContract = await ethers.getContractAt(ERC20_ABI, grapeTokenAddress);
+    const wineTokenContract = await ethers.getContractAt(ERC20_ABI, wineTokenAddress);
+    const mimTokenContract = await ethers.getContractAt(ERC20_ABI, mimTokenAddress);
+    const grapeMIMLPTokenContract = await ethers.getContractAt(ERC20_ABI, grapeMIMLPTokenAddress);
+    const grapeWineLPTokenContract = await ethers.getContractAt(ERC20_ABI, grapeWineLPTokenAddress);
+    const mimWineLPTokenContract = await ethers.getContractAt(ERC20_ABI, mimWineLPTokenAddress);
+
+    let avaxTokenBalance = await ethers.provider.getBalance(account.address);
+    avaxTokenBalance = Money.parseAmount(avaxTokenBalance);
+
+    let mimTokenBalance = await mimTokenContract.balanceOf(account.address);
+    mimTokenBalance = Money.parseAmount(mimTokenBalance);
+
+    let grapeTokenBalance = await grapeTokenContract.balanceOf(account.address);
+    grapeTokenBalance = Money.parseAmount(grapeTokenBalance);
+
+    let wineTokenBalance = await wineTokenContract.balanceOf(account.address);
+    wineTokenBalance = Money.parseAmount(wineTokenBalance);
+
+    let grapeMIMLPTokenBalance = await grapeMIMLPTokenContract.balanceOf(account.address);
+    grapeMIMLPTokenBalance = Money.parseAmount(grapeMIMLPTokenBalance);
+
+    let grapeWineLPTokenBalance = await grapeWineLPTokenContract.balanceOf(account.address);
+    grapeWineLPTokenBalance = Money.parseAmount(grapeWineLPTokenBalance);
+
+    let mimWineLPTokenBalance = await mimWineLPTokenContract.balanceOf(account.address);
+    mimWineLPTokenBalance = Money.parseAmount(mimWineLPTokenBalance);
+
+    return {
+        AVAX: avaxTokenBalance,
+        GRAPE: grapeTokenBalance,
+        MIM: mimTokenBalance,
+        WINE: wineTokenBalance,
+        GRAPE_MIM_LP: grapeMIMLPTokenBalance,
+        GRAPE_WINE_LP: grapeWineLPTokenBalance,
+        MIM_WINE_LP: mimWineLPTokenBalance,
+    };
+}
+async function getDelta(before: balances, after: balances){
+    let delta: {[key: string]:any} = {}
+    for (const key in before) {
+        delta[key] = after[key] - before[key];
+      }
+      return delta
+}
+
+task("checkfunds", "execute task CHeck Funds")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        const account: SignerWithAddress = await getAccount();
+        await checkFunds(account.address);
+
+    });
+
+task("claim", "execute task Claim")
+    .addParam("protocol", "protocol to be operated with")
+    .addParam("amount", "amount to claim")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            protocol: taskArgs["protocol"],
+            amount: taskArgs["amount"]
+        };
+        const safeProtocolId = registry.findProtocol(unsafeArgs.protocol).id;
+        const safeAmount = Money.toSafeMoneyWithLimit(unsafeArgs.amount);
+        const safeArgs = {
+            protocol: safeProtocolId, amount: safeAmount
+        };
+        ///////////////////////////////////////////////////////////////////
+        const account: SignerWithAddress = await getAccount();
+        const entity = registry.getEntityData(safeProtocolId);
+        await claimExecutor(new ClaimTask({
+            name: "claim",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+    });
+
+task("swapnative", "execute task Swap Native")
+    .addParam("protocol", "protocol to be operated with")
+    .addParam("tokenin", "token-in name")
+    .addParam("tokenout", "token-out name")
+    .addParam("amount", "amount of tokens to swap")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            protocol: taskArgs["protocol"],
+            amount: taskArgs["amount"],
+            tokenin: taskArgs["tokenin"],
+            tokenout: taskArgs["tokenout"]
+        };
+        const safeProtocolId = registry.findProtocol(unsafeArgs.protocol).id;
+        const safeAmount = Money.toSafeMoneyWithLimit(unsafeArgs.amount);
+        const safeTokenInAddress = registry.findToken(unsafeArgs.tokenin).address;
+        const safeTokenOutAddress = registry.findToken(unsafeArgs.tokenout).address;
+        const safeArgs = {
+            protocol: safeProtocolId,
+            tokenInAddress: safeTokenInAddress,
+            tokenOutAddress: safeTokenOutAddress,
+            amount: safeAmount
+        };
+        ///////////////////////////////////////////////////////////////////
+        const account: SignerWithAddress = await getAccount();
+        const entity = registry.getEntityData(safeProtocolId);
+        await swapNativeExecutor(new SwapNativeTask({
+            name: "swapnative",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+    });
+
+task("swaptokens", "execute task Swap Tokens")
+    .addParam("protocol", "protocol to be operated with")
+    .addParam("tokenin", "token-in name")
+    .addParam("tokenout", "token-out name")
+    .addParam("amount", "amount of tokens to swap")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            protocol: taskArgs["protocol"],
+            amount: taskArgs["amount"],
+            tokenin: taskArgs["tokenin"],
+            tokenout: taskArgs["tokenout"]
+        };
+        const safeProtocolId = registry.findProtocol(unsafeArgs.protocol).id;
+        const safeAmount = Money.toSafeMoneyWithLimit(unsafeArgs.amount);
+        const safeTokenInAddress = registry.findToken(unsafeArgs.tokenin).address;
+        const safeTokenOutAddress = registry.findToken(unsafeArgs.tokenout).address;
+        const safeArgs = {
+            protocol: safeProtocolId,
+            tokenInAddress: safeTokenInAddress,
+            tokenOutAddress: safeTokenOutAddress,
+            amount: safeAmount
+        };
+        ///////////////////////////////////////////////////////////////////
+        const account: SignerWithAddress = await getAccount();
+        const entity = registry.getEntityData(safeProtocolId);
+        await swapTokensExecutor(new SwapTokensTask({
+            name: "swaptokens",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+    });
+
+
+task("addliquidity", "execute task Add Liquidity")
+    .addParam("protocol", "protocol to be operated with")
+    .addParam("token1", "token-1 name")
+    .addParam("token2", "token-2 name")
+    .addParam("amount1", "amount-1 of tokens to provide")
+    .addParam("amount2", "amount-2 of tokens to provide")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            protocol: taskArgs["protocol"],
+            amount1: taskArgs["amount1"],
+            amount2: taskArgs["amount2"],
+            token1: taskArgs["token1"],
+            token2: taskArgs["token2"]
+        };
+        const safeProtocolId = registry.findProtocol(unsafeArgs.protocol).id;
+        const safeAmount1 = Money.toSafeMoneyWithLimit(unsafeArgs.amount1);
+        const safeAmount2 = Money.toSafeMoneyWithLimit(unsafeArgs.amount2);
+        const safeToken1Address = registry.findToken(unsafeArgs.token1).address;
+        const safeToken2Address = registry.findToken(unsafeArgs.token2).address;
+        const safeArgs = {
+            protocol: safeProtocolId,
+            token1Address: safeToken1Address,
+            token2Address: safeToken2Address,
+            amount1: safeAmount1,
+            amount2: safeAmount2
+        };
+        ///////////////////////////////////////////////////////////////////
+        const account: SignerWithAddress = await getAccount();
+        const entity = registry.getEntityData(safeProtocolId);
+        await addLiquidityExecutor(new AddLiquidityTask({
+            name: "addliquidity",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+    });
+
+task("removeliquidity", "execute task Remove Liquidity")
+    .addParam("protocol", "protocol to be operated with")
+    .addParam("token1", "token-1 name")
+    .addParam("token2", "token-2 name")
+    .addParam("liquiditypair", "name of the liquidity pair")
+    .addParam("amount", "amount of liquidity to be removed")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            protocol: taskArgs["protocol"],
+            token1: taskArgs["token1"],
+            token2: taskArgs["token2"],
+            amount: taskArgs["amount"],
+            liquidityPair: taskArgs["liquiditypair"]
+        };
+        const safeProtocolId = registry.findProtocol(unsafeArgs.protocol).id;
+        const safeAmount = Money.toSafeMoneyWithLimit(unsafeArgs.amount);
+        const safeToken1Address = registry.findToken(unsafeArgs.token1).address;
+        const safeToken2Address = registry.findToken(unsafeArgs.token2).address;
+        const safeLiquidityPair = registry.findToken(unsafeArgs.liquidityPair).id;
+        const safeArgs = {
+            protocol: safeProtocolId,
+            token1Address: safeToken1Address,
+            token2Address: safeToken2Address,
+            liquidityPair: safeLiquidityPair,
+            amount: safeAmount
+        };
+        ///////////////////////////////////////////////////////////////////
+        const account: SignerWithAddress = await getAccount();
+        const entity = registry.getEntityData(safeProtocolId);
+        await removeLiquidityExecutor(new RemoveLiquidityTask({
+            name: "removeliquidity",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+    });
+
+task("buynode", "execute task Buy Node")
+    .addParam("protocol", "protocol to be operated with")
+    .addParam("amount", "amount of nodes to buy")
+    .addParam("node", "type of node (eg: grape, wine...)")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            protocol: taskArgs["protocol"],
+            node: taskArgs["node"],
+            amount: taskArgs["amount"]
+        };
+        const safeProtocolId = registry.findProtocol(unsafeArgs.protocol).id;
+        const safeAmount = Money.toSafeMoneyWithLimit(unsafeArgs.amount);
+        const safeNodeId = registry.findNode(unsafeArgs.node).id;
+        const safeArgs = {
+            protocol: safeProtocolId, 
+            node: safeNodeId,
+            amount: safeAmount
+        };
+        ///////////////////////////////////////////////////////////////////
+        const account: SignerWithAddress = await getAccount();
+        const entity = registry.getEntityData(safeProtocolId);
+        await buyNodeExecutor(new BuyNodeTask({
+            name: "buynode",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+    });
+
+task("stake", "execute task Stake")
+    .addParam("protocol", "protocol to be operated with")
+    .addParam("amount", "amount to stake")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            protocol: taskArgs["protocol"],
+            amount: taskArgs["amount"]
+        };
+        const safeProtocolId = registry.findProtocol(unsafeArgs.protocol).id;
+        const safeAmount = Money.toSafeMoneyWithLimit(unsafeArgs.amount);
+        const safeArgs = {
+            protocol: safeProtocolId, amount: safeAmount
+        };
+        ///////////////////////////////////////////////////////////////////
+        const account: SignerWithAddress = await getAccount();
+        const entity = registry.getEntityData(safeProtocolId);
+        const x = new StakeTask({
+            name: "stake",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        });
+        await stakeExecutor(x, safeArgs);
+    });
+
+task("deposit", "execute task Deposit")
+    .addParam("protocol", "protocol to be operated with")
+    .addParam("liquiditypair", "name of the liquidity pair")
+    .addParam("amount", "amount to stake")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            protocol: taskArgs["protocol"],
+            amount: taskArgs["amount"],
+            liquidityPair: taskArgs["liquiditypair"]
+        };
+        const safeProtocolId = registry.findProtocol(unsafeArgs.protocol).id;
+        const safeAmount = Money.toSafeMoneyWithLimit(unsafeArgs.amount);
+        const safeLiquidityPairId = registry.findToken(unsafeArgs.liquidityPair).id;
+        const safeArgs = {
+            protocol: safeProtocolId,
+            amount: safeAmount,
+            liquidityPair: safeLiquidityPairId
+        };
+        ///////////////////////////////////////////////////////////////////
+        const account: SignerWithAddress = await getAccount();
+        const entity = registry.getEntityData(safeProtocolId);
+        await depositExecutor(new DepositTask({
+            name: "deposit",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+    });
+
+task("poolclaim", "execute task Claim")
+    .addParam("protocol", "protocol to be operated with")
+    .addParam("pool", "pool to be operated with")
+    .addParam("amount", "amount to stake")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            protocol: taskArgs["protocol"],
+            pool: taskArgs["pool"],
+            amount: taskArgs["amount"]
+        };
+        const safeProtocolId = registry.findProtocol(unsafeArgs.protocol).id;
+        const safePool = registry.findPool(unsafeArgs.pool).id;
+        const safeAmount = Money.toSafeMoneyWithLimit(unsafeArgs.amount);
+        const safeArgs = {
+            protocol: safeProtocolId, pool: safePool, amount: safeAmount
+        };
+        ///////////////////////////////////////////////////////////////////
+        const account: SignerWithAddress = await getAccount();
+        const entity = registry.getEntityData(safeProtocolId);
+        await poolclaimExecutor(new PoolClaimTask({
+            name: "poolclaim",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+    });
+
+task("grapeFlow04", "execute flow for Grape Finance")
+    .setAction(async (taskArgs, hre) => {
+        setEnvironment(hre);
+        const dataObj = {
+            balances: Array<walletBalance>()
+        };
+        ///////////////////////////////////////////////////////////////////
+        const unsafeArgs = {
+            F4T1A: FLOW_04_TASK_01_MIN_AMOUNT_OF_MIM_TO_START,
+            F4T1B: FLOW_04_TASK_01_MIN_AMOUNT_OF_WINE_REWARDS_TO_START,
+            F4T1E: FLOW_04_TASK_01_MIN_AMOUNT_OF_WINE_IN_WALLET,
+            F4T1F: FLOW_04_TASK_01_PERCENTAGE_OF_WINE_TO_STAKE_INTO_WINE_GRAPE_LP,
+            F4T1G: FLOW_04_TASK_01_PERCENTAGE_OF_WINE_TO_STAKE_INTO_WINE_MIM_LP
+        };
+
+        const safeF4T1A = EnvUtil.toNumber(unsafeArgs.F4T1A);
+        const safeF4T1B = EnvUtil.toNumber(unsafeArgs.F4T1B);
+        const safeF4T1D = Money.toSafeMoneyWithLimit(0); //  by default, we don't withdraw from the LP by default when we claim
+        const safeF4T1E = EnvUtil.toNumber(unsafeArgs.F4T1E);
+        const safeF4T1F = EnvUtil.toNumber(unsafeArgs.F4T1F);
+        const safeF4T1G = EnvUtil.toNumber(unsafeArgs.F4T1F);
+
+        const safeTraderJoeId = registry.findProtocol("traderjoe").id;
+        const safeVineyardId = registry.findProtocol("grapefinance-vineyard").id;
+        const safeWineryId = registry.findProtocol("grapefinance-winery").id;
+        const safeGrapeMIMPoolId = "grapemimlp";
+        const safeMIMWinePoolId = "mimwinelp";
+        const safeGrapeWinePoolId = "grapewinelp";
+
+        const traderJoeContractAddress = registry.findProtocol("traderjoe").address;
+
+        const grapeTokenAddress = registry.findToken("grape").address;
+        const wineTokenAddress = registry.findToken("wine").address;
+        const mimTokenAddress = registry.findToken("mim").address;
+        const grapeWineLPTokenAddress = registry.findToken("grape-wine-lp").address;
+        const mimWineLPTokenAddress = registry.findToken("mim-wine-lp").address;
+        const grapeMIMLPTokenAddress = registry.findToken("grape-mim-lp").address;
+
+        const traderJoeContract = await ethers.getContractAt(TRADERJOE_ABI, traderJoeContractAddress);
+
+        const grapeTokenContract = await ethers.getContractAt(ERC20_ABI, grapeTokenAddress);
+        const wineTokenContract = await ethers.getContractAt(ERC20_ABI, wineTokenAddress);
+        const mimTokenContract = await ethers.getContractAt(ERC20_ABI, mimTokenAddress);
+        const grapeMIMLPTokenContract = await ethers.getContractAt(ERC20_ABI, grapeMIMLPTokenAddress);
+        const grapeWineLPTokenContract = await ethers.getContractAt(ERC20_ABI, grapeWineLPTokenAddress);
+        const mimWineLPTokenContract = await ethers.getContractAt(ERC20_ABI, mimWineLPTokenAddress);
+
+        const account: SignerWithAddress = await getAccount();
+        const accountAddress = account.address;
+        let entity = registry.getEntityData(safeVineyardId);
+
+        interface walletBalance {
+            address: string;
+            mim: number;
+            wine: number;
+        }
+
+        const balance: walletBalance = {
+            address: accountAddress,
+            mim: 0,
+            wine: 0
+
+        };
+
+        // 1. Check the available MIM balance
+        let mimTokenBalance = await mimTokenContract.balanceOf(accountAddress);
+        mimTokenBalance = Money.parseAmount(mimTokenBalance);
+        console.log("mimTokenBalance:", mimTokenBalance);
+
+        if (mimTokenBalance < safeF4T1A) {
+            console.log("! --> amount of MIM in wallet is not above threshold. Cancelling script...");
+            process.exit();
+            // throw new Error('amount of MIM in wallet is not above threshold.');
+        }
+
+        // 2. Claim WINE from each pool
+        // 2.1. claim WINE from GRAPE-MIM-LP
+        let safeArgs = {
+            protocol: safeVineyardId,
+            pool: safeGrapeMIMPoolId,
+            amount: safeF4T1D
+        };
+        console.log("//////////////////////////CLAIM WINE FROM GRAPE-MIM-LP");
+        await poolclaimExecutor(new PoolClaimTask({
+            name: "poolclaim",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+
+        // 2.2. claim WINE from WINE-MIM-LP
+        safeArgs = {
+            protocol: safeVineyardId,
+            pool: safeMIMWinePoolId,
+            amount: safeF4T1D
+        };
+        console.log("//////////////////////////CLAIM WINE FROM WINE-MIM-LP ");
+        await poolclaimExecutor(new PoolClaimTask({
+            name: "poolclaim",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+
+        // 2.3. claim WINE from GRAPE-WINE-LP
+        safeArgs = {
+            protocol: safeVineyardId,
+            pool: safeGrapeWinePoolId,
+            amount: safeF4T1D
+        };
+        console.log("//////////////////////////CLAIM WINE FROM GRAPE-WINE-LP");
+        await poolclaimExecutor(new PoolClaimTask({
+            name: "poolclaim",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgs);
+
+
+        // 3. Check amount of WINE in wallet
+
+        let wineTokenBalance = await wineTokenContract.balanceOf(accountAddress);
+        wineTokenBalance = Money.parseAmount(wineTokenBalance);
+        console.log("wineTokenBalance:", wineTokenBalance);
+        balance["wine"] = wineTokenBalance;
+
+        if (wineTokenBalance < safeF4T1E) {
+            console.log("! --> amount of WINE in wallet is not above threshold. Cancelling script...");
+            process.exit();
+            // throw new Error('amount of WINE in wallet is not above threshold.');
+        }
+
+
+        let amountOfWineToStakeIntoWineGrapeLp = wineTokenBalance * (33.33 / 100);
+        let amountOfWineToStakeIntoMimWineLp = wineTokenBalance * (33.3 / 100);
+        const amountOfWineToStakeIntoWinery = wineTokenBalance * (33.33 / 100);
+        console.log("amountOfWineToStakeIntoWineGrapeLp:", amountOfWineToStakeIntoWineGrapeLp);
+        console.log("amountOfWineToStakeIntoMimWineLp:", amountOfWineToStakeIntoMimWineLp);
+        console.log("amountOfWineToStakeIntoWinery:", amountOfWineToStakeIntoWinery);
+
+        // check price of GRAPE in MIM
+        let grapePriceInMim = await traderJoeContract.getAmountsOut(Money.toBigNumber(1), [grapeTokenAddress, mimTokenAddress]);
+        grapePriceInMim = Money.parseAmount(grapePriceInMim[1]);
+        console.log("grapePriceInMim: ", grapePriceInMim);
+
+        // check price of WINE in MIM
+        let winePriceInMim = await traderJoeContract.getAmountsOut(Money.toBigNumber(1), [wineTokenAddress, mimTokenAddress]);
+        winePriceInMim = Money.parseAmount(winePriceInMim[1]);
+        console.log("winePriceInMim: ", winePriceInMim);
+
+        const wineGrapeRatio = winePriceInMim / grapePriceInMim;
+        console.log("wineGrapeRatio:", wineGrapeRatio);
+
+        let amountOfGrapeToBuy = (amountOfWineToStakeIntoWineGrapeLp * wineGrapeRatio);
+        console.log("amountOfGrapeToBuy:", amountOfGrapeToBuy);
+
+        let amountOfMimToInputIntoWineGrapeLp = amountOfGrapeToBuy * grapePriceInMim;
+        console.log("amountOfMimToInputIntoWineGrapeLp:", amountOfMimToInputIntoWineGrapeLp);
+
+        let amountOfMimToInputIntoMimWineLp = winePriceInMim * amountOfWineToStakeIntoMimWineLp;
+        console.log("amountOfMimToInputIntoMimWineLp:", amountOfMimToInputIntoMimWineLp);
+
+        const amountOfNecessaryMim = amountOfMimToInputIntoWineGrapeLp + amountOfMimToInputIntoMimWineLp;
+        console.log("amountOfNecessaryMim:", amountOfNecessaryMim);
+
+        const amountOfMimToFetch = amountOfNecessaryMim - mimTokenBalance;
+        console.log("amountOfMimToFetch:", amountOfMimToFetch);
+
+        let amountOfGrapeMimLPTokensToRemove = 0;
+        if (amountOfMimToFetch > 0) {
+
+            amountOfGrapeMimLPTokensToRemove = amountOfMimToFetch / grapePriceInMim;
+        }
+
+        console.log("amountOfGrapeMimLPTokensToRemove:", amountOfGrapeMimLPTokensToRemove);
+
+        const safeAmountOfGrapeToBuy = Money.toSafeMoneyWithLimit(amountOfGrapeToBuy);
+        const safeAmountOfMimToInputIntoWineGrapeLp = Money.toSafeMoneyWithLimit(amountOfMimToInputIntoWineGrapeLp);
+        const safeAmountOfWineToStakeIntoWineGrapeLp = Money.toSafeMoneyWithLimit(amountOfWineToStakeIntoWineGrapeLp);
+
+        const safeAmountOfMimToInputIntoMimWineLp = Money.toSafeMoneyWithLimit(amountOfMimToInputIntoMimWineLp);
+        const safeAmountOfWineToStakeIntoMimWineLp = Money.toSafeMoneyWithLimit(amountOfWineToStakeIntoMimWineLp);
+        const safeAmountOfGrapeMimLPTokensToRemove = Money.toSafeMoneyWithLimit(amountOfGrapeMimLPTokensToRemove);
+
+        if (amountOfGrapeMimLPTokensToRemove > 0) {
+            console.log("////////////////////////// REMOVE LIQUIDITY FROM GRAPE-MIM-LP");
+            const safeProtocolId = registry.findProtocol("traderjoe").id;
+            const safeAmount = safeAmountOfGrapeMimLPTokensToRemove;
+            const safeToken1Address = registry.findToken("grape").address;
+            const safeToken2Address = registry.findToken("mim").address;
+            const safeLiquidityPair = registry.findToken("grape-mim-lp").id;
+            const safeArgs = {
+                protocol: safeProtocolId,
+                token1Address: safeToken1Address,
+                token2Address: safeToken2Address,
+                liquidityPair: safeLiquidityPair,
+                amount: safeAmount
+            };
+            ///////////////////////////////////////////////////////////////////
+            const account: SignerWithAddress = await getAccount();
+            const entity = registry.getEntityData(safeProtocolId);
+            await removeLiquidityExecutor(new RemoveLiquidityTask({
+                name: "removeliquidity",
+                context: { address: account.address, provider: hre.ethers.provider },
+                entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+            }), safeArgs);
+
+        } else {
+            console.log("No need to remove GRAPE-MIM-LP tokens from the Vineyard. There is enough MIM available.");
+        }
+
+        mimTokenBalance = await mimTokenContract.balanceOf(accountAddress);
+        mimTokenBalance = Money.parseAmount(mimTokenBalance);
+        console.log("new mimTokenBalance:", mimTokenBalance);
+        balance["mim"] = mimTokenBalance;
+
+        const safeArgsB = {
+            protocol: safeTraderJoeId,
+            tokenInAddress: mimTokenAddress,
+            tokenOutAddress: grapeTokenAddress,
+            amount: safeAmountOfMimToInputIntoWineGrapeLp
+        };
+
+        console.log("//////////////////////////SWAP MIM FOR GRAPE AT TRADERJOE");
+        await swapTokensExecutor(
+            new SwapTokensTask({
+                name: "swaptokens",
+                context: {
+                    address: account.address,
+                    provider: hre.ethers.provider
+                }, entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+            }),
+            safeArgsB);
+
+        // Add Liquidity to Grape Wine LP at TraderJoe
+        const safeArgsC = {
+            protocol: safeTraderJoeId,
+            token1Address: grapeTokenAddress,
+            token2Address: wineTokenAddress,
+            amount1: safeAmountOfGrapeToBuy,
+            amount2: safeAmountOfWineToStakeIntoWineGrapeLp
+        };
+        console.log("//////////////////////////ADD LIQUIDITY TO GRAPE-WINE-LP AT TRADERJOE ");
+        await addLiquidityExecutor(
+            new AddLiquidityTask({
+                name: "addliquidity",
+                context: {
+                    address: account.address,
+                    provider: hre.ethers.provider
+                }, entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+            }),
+            safeArgsC);
+
+        // Get Balance of Grape-Wine-LP tokens in wallet
+        let grapeWineLPTokenBalance = await grapeWineLPTokenContract.balanceOf(accountAddress);
+        grapeWineLPTokenBalance = Money.parseAmount(grapeWineLPTokenBalance);
+        console.log("grapeWineLPTokenBalance :", grapeWineLPTokenBalance);
+
+        const amountOfLPToDeposit = Money.toSafeMoneyWithLimit(grapeWineLPTokenBalance * 0.9995);
+
+        // Add WINE-GRAPE-LP-token to Grape
+        const safeLiquidityPairId = registry.findToken("grape-wine-lp").id;
+        const safeArgsD = {
+            protocol: safeVineyardId,
+            amount: amountOfLPToDeposit,
+            liquidityPair: safeLiquidityPairId
+        };
+        entity = registry.getEntityData(safeVineyardId);
+        console.log("//////////////////////////DEPOSIT GRAPE-WINE-LP TOKEN AT GRAPE-FINANCE'S VINEYARD");
+        await depositExecutor(
+            new DepositTask({
+                name: "deposit",
+                context: { address: account.address, provider: hre.ethers.provider },
+                entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+            }), safeArgsD);
+
+        // Add Liquidity to MIM Wine LP at TraderJoe
+        const safeArgsE = {
+            protocol: safeTraderJoeId,
+            token1Address: mimTokenAddress,
+            token2Address: wineTokenAddress,
+            amount1: safeAmountOfMimToInputIntoMimWineLp,
+            amount2: safeAmountOfWineToStakeIntoMimWineLp
+        };
+        console.log("//////////////////////////ADD LIQUIDITY TO MIM-WINE-LP AT TRADERJOE");
+        await addLiquidityExecutor(new AddLiquidityTask({
+            name: "addliquidity",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgsE);
+
+        // Get Balance of Grape-Wine-LP tokens in wallet
+        let mimWineLPTokenBalance = await mimWineLPTokenContract.balanceOf(accountAddress);
+        mimWineLPTokenBalance = Money.parseAmount(mimWineLPTokenBalance);
+        console.log("mimWineLPTokenBalance :", mimWineLPTokenBalance);
+
+        const amountOfMimWineLPToDeposit = Money.toSafeMoneyWithLimit(mimWineLPTokenBalance * 0.9995);
+
+        // Add MIM-WINE-LP-token to Grape
+        const safeMimWineLiquidityPairId = registry.findToken("mim-wine-lp").id;
+        const safeArgsF = {
+            protocol: safeVineyardId,
+            amount: amountOfMimWineLPToDeposit,
+            liquidityPair: safeMimWineLiquidityPairId
+        };
+        entity = registry.getEntityData(safeVineyardId);
+        console.log("////////////////////////// DEPOSIT MIM-WINE-LP TOKEN AT GRAPE-FINANCE'S VINEYARD");
+        await depositExecutor(new DepositTask({
+            name: "deposit",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgsF);
+
+
+        const safeProtocolId = registry.findProtocol("grapefinance-winery").id;
+        const safeAmount = Money.toSafeMoneyWithLimit(amountOfWineToStakeIntoWinery);
+        const safeArgsG = {
+            protocol: safeProtocolId, amount: safeAmount
+        };
+        ///////////////////////////////////////////////////////////////////
+        entity = registry.getEntityData(safeProtocolId);
+        console.log("////////////////////////// STAKE WINE AT THE WINERY");
+        await stakeExecutor(new StakeTask({
+            name: "stake",
+            context: { address: account.address, provider: hre.ethers.provider },
+            entity: { ABI: entity.ABI, address: entity.address, hre: hre.ethers }
+        }), safeArgsG);
+
+    });

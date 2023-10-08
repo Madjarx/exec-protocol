@@ -1,0 +1,50 @@
+# https://github.com/garethfuller/hardhat-template/blob/main/Dockerfile.dev
+FROM node:14
+
+ENV APP_ROOT /app
+RUN mkdir ${APP_ROOT}
+
+####################################
+# add files
+####################################
+ADD ./docker/deps ${APP_ROOT}/deps
+#ADD ./hardhat.config.ts ${APP_ROOT}/       # decided that it's not necessary to check hardhat.config.ts in "deps"
+ADD ./package.json ${APP_ROOT}/
+####################################
+# install OS dependencies
+####################################
+WORKDIR ${APP_ROOT}/deps
+RUN pwd && ls -lh . && chmod +x install-deps.sh && ./install-deps.sh
+####################################
+# setup package.json
+####################################
+WORKDIR ${APP_ROOT}
+RUN pwd && ls -lh && tree . && yarn install
+####################################
+# run checks
+####################################
+WORKDIR $APP_ROOT/deps/checks
+RUN pwd && ls -lh && \
+    tree . && \
+    mv checks.env .env && \
+    cp -r ${APP_ROOT}/node_modules . && \
+    pwd && ls -lh
+####################################
+# check hardhat
+####################################
+WORKDIR $APP_ROOT/deps/checks
+RUN npx hardhat --version && \
+    npx hardhat --help && \
+    yarn run test:checks && \
+    yarn run compile:checks && \
+    yarn run deploy:checks && \
+    npx hardhat accounts
+####################################
+# check project
+####################################
+WORKDIR ${APP_ROOT}
+RUN pwd && ls -alh && tree -I node_modules .
+
+EXPOSE 8545
+
+CMD [ "npx", "hardhat", "--config", "${APP_ROOT}/deps/checks/hardhat.config.js", "help" ]

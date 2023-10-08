@@ -1,0 +1,48 @@
+version: "3.1"
+
+services:
+
+  bot:
+    image: node:14-alpine
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: "npx hardhat --network local checkfunds"
+# docker-compose exec bot hardhat --help
+#    command: [
+#      "/bin/sh",
+#      "/home/node/app/exec-bot.sh"
+#    ]
+#    command: "/usr/sbin/crond -f -l 0 -c /home/node/app/crontab -L /var/log/cron.log"
+    links:
+      - localfork
+    environment:
+      - LOCALFORK_URL=http://localfork:8545
+      - LOCALFORK_CHAIN_ID=431337
+#    command: ["/usr/bin/sh", "/home/node/app/exec-bot.sh"]
+
+  #  hardhat:
+  #    image: hardhat/hardhat
+  #    working_dir: /home/node/app
+  #    volumes:
+  #      - ../:/home/node/app
+  #    command: "/home/node/app/exec-hardhat.sh"
+
+  localfork:
+    image: bstreet/exec-protocol-deps:latest
+#    restart: no
+    command: yarn run fork
+    environment:
+      - HARDHAT_FORK_URL=https://api.avax.network/ext/bc/C/rpc
+      - HARDHAT_CHAIN_ID=431337
+    volumes:
+      - ./:/app
+#      - ../.env:/app/.env
+#      - ./tasks:/app/tasks
+#      - ./tests:/app/tests
+#      - ./scripts:/app/scripts
+#      - ./lib:/app/lib
+#      - ./.env:/app/.env
+#      - ./<PATH_TO_FRONTEND_DIR>/contracts:/app/tmp/contracts
+    ports:
+      - "8545:8545"

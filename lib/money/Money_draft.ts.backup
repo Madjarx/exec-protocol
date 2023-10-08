@@ -1,0 +1,43 @@
+/*
+interface Money {
+
+    // Money is any item or verifiable record that is generally 
+    // accepted as payment for goods and services and repayment of debts.
+    // The main functions of money are distinguished as: a medium of exchange,
+    // a unit of account, a store of value and sometimes, a standard of deferred payment.
+    
+
+}
+
+class Currency implements Money {
+    // a Currency sets a unit of account for Money, by defining a name, a symbol, the number of decimals
+    private name: string;
+    private symbol: string;
+    private decimals: number;
+    private issuer: string;
+    private value: {
+        // the value of a currency is measured in other currencies
+        USD: Currency;
+        BTC: Currency;
+    };
+
+    public constructor(name: string, symbol: string, decimals: number) {
+        this.name = name;
+        this.symbol = symbol;
+        this.decimals = decimals;
+    }
+
+}
+
+class CryptoCurrency extends Currency {
+    private blockchain: string;
+    public constructor(name: string, symbol: string, decimals: number, blockchain: string) {
+        super(name, symbol, decimals);
+        this.blockchain = blockchain;
+    }
+
+}
+
+// instantiation examples
+const ethereumCurrency = new Currency("Ethereum", "ETH", 18);
+*/

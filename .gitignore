@@ -1,0 +1,55 @@
+lib-cov
+*.seed
+*.log
+*.csv
+*.dat
+*.out
+*.pid
+*.gz
+*.swp
+
+pids
+logs
+results
+tmp
+
+# Build
+public/css/main.css
+
+# Coverage reports
+coverage
+
+
+# Dependency directory
+node_modules
+bower_components
+**/node_modules
+
+# Editors
+.idea
+*.iml
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Ignore built ts files
+dist/**/*
+
+**/.DS_Store
+
+#Hardhat files
+cache
+artifacts
+typechain
+.contract
+.wallet
+
+# API keys and secrets
+.env
+**/.env
+.env.keys
+
+transaction-history/*
+yarn.lock
+hardhat-template

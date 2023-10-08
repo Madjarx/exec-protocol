@@ -1,0 +1,10 @@
+{
+  "name": "docker-deps",
+  "scripts": {
+    "start:checks": "./node_modules/.bin/hardhat --config hardhat.config.checks.js node",
+    "deploy:checks": "./node_modules/.bin/hardhat --config hardhat.config.checks.js my-deploy",
+    "deploy:checks2": "./node_modules/.bin/hardhat --config hardhat.config.checks.js --network localhost my-deploy",
+    "test:checks": "./node_modules/.bin/hardhat --config hardhat.config.checks.js test",
+    "compile:checks": "./node_modules/.bin/hardhat --config hardhat.config.checks.js compile"
+  }
+}

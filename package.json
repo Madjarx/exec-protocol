@@ -1,0 +1,74 @@
+{
+  "name": "exec-protocol",
+  "version": "0.0.1",
+  "description": "Exec-Protocol, TypeScript Node Exec Protocol",
+  "author": "ruy-dan",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "keywords": [
+    "node-red",
+    "typescript"
+  ],
+  "repository": "https://github.com/yieldbox/exec-protocol",
+  "scripts": {
+    "check-env": "dotenv -- cross-var echo %INFURA_ID%",
+    "fork": "dotenv -- cross-var hardhat node",
+    "fork-avax": "dotenv -- cross-var hardhat node --fork %AVALANCHE_MAINNET_URL%",
+    "fork-main": "dotenv -- cross-var hardhat node --fork %MAINNET_URL%",
+    "start": "npm run watch",
+    "build": "npm run build-ts && npm run tslint && npm run copy-static-assets",
+    "watch-node": "nodemon --watch dist/ --exec \"node-red\"",
+    "watch": "concurrently --kill-others-on-fail -p \"[{name}]\" -n \"Assets,TypeScript,Node\" -c \"yellow.bold,cyan.bold,green.bold\" \"npm run copy-static-assets\" \"npm run watch-ts\" \"npm run watch-node\"",
+    "test": "mocha --watch -r ts-node/register tests/lib/**",
+    "test-money": "mocha --watch -r ts-node/register tests/lib/money/**",
+    "test-digits": "mocha -r ts-node/register tests/lib/money/Digits.tests.ts",
+    "coverage": "jest --forceExit --coverage --verbose",
+    "build-ts": "tsc",
+    "watch-ts": "tsc -w",
+    "tslint": "tslint -c tslint.json -p tsconfig.json",
+    "copy-static-assets": "ts-node copyStaticAssets.ts"
+  },
+  "node-red": {
+    "nodes": {
+      "node-basic": "dist/nodes/node-basic.js",
+      "node-rubymine": "dist/nodes/node-rubymine.js"
+    }
+  },
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.0.2",
+    "@nomiclabs/hardhat-waffle": "^2.0.1",
+    "@nomiclabs/hardhat-web3": "^2.0.0",
+    "@typechain/hardhat": "^2.3.0",
+    "@types/chai": "^4.2.21",
+    "@types/lodash": "^4.14.182",
+    "@types/mocha": "^9.0.0",
+    "@types/node": "^14.0.0",
+    "@types/node-red": "^0.17.3",
+    "@types/shelljs": "^0.8.4",
+    "concurrently": "^4.1.0",
+    "dotenv": "^16.0.1",
+    "ethereum-waffle": "^3.4.0",
+    "ethers": "^5.4.4",
+    "hardhat": "^2.6.0",
+    "hardhat-deploy": "^0.7.5",
+    "hardhat-deploy-ethers": "^0.3.0-beta.7",
+    "node-red": "^0.20.5",
+    "nodemon": "^1.18.0",
+    "prettier": "^1.17.0",
+    "shelljs": "^0.8.3",
+    "ts-generator": "^0.1.1",
+    "ts-jest": "^24.0.2",
+    "ts-node": "^10.1.0",
+    "tslint": "^5.15.0",
+    "typechain": "^5.1.2",
+    "typescript": "^4.3.5",
+    "web3": "^1.7.3"
+  },
+  "dependencies": {
+    "chai": "^4.3.6",
+    "cross-var": "^1.1.0",
+    "dotenv-cli": "^6.0.0",
+    "lodash": "^4.17.21",
+    "mocha": "^10.0.0"
+  }
+}
